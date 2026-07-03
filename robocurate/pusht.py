@@ -138,13 +138,15 @@ def load_lerobot_pool(
 
         if reward is not None and np.ptp(reward[m]) > 0:
             quality.append(float(reward[m].max()))
-        elif success is not None:
+        elif success is not None and np.ptp(success[m]) > 0:
             quality.append(float(success[m].mean()))
         elif reward is not None:
             quality.append(float(reward[m][-1]))
+        elif return_kinematics:
+            quality.append(float("nan"))   # reward-free dataset (e.g. ALOHA): proxy-q only
         else:
             raise KeyError(
-                f"no reward/success column found in {repo_id} "
+                f"no usable reward/success column in {repo_id} "
                 f"(columns: {hf.column_names})"
             )
 

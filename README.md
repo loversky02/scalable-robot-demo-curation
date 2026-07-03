@@ -18,7 +18,7 @@ useful through automatic informativeness-aware curation?*
 |-------|------|-------|
 | **M1**   | quality×diversity DPP engine + ablation            | ✅ done, offline-verified (31 tests) |
 | **M2.5** | reward-free proxy-q, non-circular study            | ✅ done, offline (synthetic) |
-| **M1.5** | run on public datasets (PushT, ALOHA-sim)          | ⏳ one command — `--source pusht` |
+| **M1.5** | run on public datasets (PushT, ALOHA-sim)          | ✅ done — real results in `outputs/`, see below |
 | **M2**   | mouse-teleop non-expert collection                 | ⬜ planned |
 | **M3**   | downstream Diffusion Policy (curated vs random)    | ⬜ planned |
 
@@ -109,6 +109,38 @@ non-expert collection often has no reward function at all. Figures in `outputs/`
 > Note: `reward-q` is an oracle upper bound; `proxy-q` is the deployable setting.
 > The cleanest non-circular evidence of all is **M3** (downstream policy success),
 > which measures a different quantity from the reward used to select.
+
+## Real-data findings (M1.5): PushT + ALOHA-sim
+
+The same pipeline runs unchanged on two public LeRobot datasets, on CPU.
+
+**`lerobot/pusht`** (206 human demos, 24-d embedding). Reward-based curation *does*
+pick measurably higher-reward demos than random — but the margin is small because
+PushT ships only expert teleop (per-episode reward 0.81–0.95, a narrow band):
+
+| selector (K=30)          | held-out reward ↑ | diversity ↑ | low-reward % ↓ |
+|--------------------------|:-----------------:|:-----------:|:--------------:|
+| random                   | 0.893             | 0.055       | 0.27           |
+| quality-only (reward-q)  | **0.928**         | 0.057       | 0.00           |
+| DPP (reward-q)           | 0.917             | 0.069       | 0.00           |
+| DPP (proxy-q)            | 0.889             | 0.082       | 0.37           |
+
+The **reward-free proxy is uninformative here** (proxy–reward correlation ≈ 0.09):
+homogeneous expert demos give kinematics little skill variance to capture.
+`next.success` is absent in this dataset → reward only.
+
+**`lerobot/aloha_sim_insertion_human`** (50 demos, 14-DoF, 168-d embedding) ships
+**no reward labels at all** — the pure deployable setting. We can only validate that
+the pipeline is *task-agnostic* (loads, embeds, computes reward-free kinematics, and
+curates); demos are near-identical (diversity ≈ 0.03), so little separates them.
+
+**Takeaway — this is the point.** On clean, homogeneous *expert* datasets, curation
+has little to gain and reward-free proxies are uninformative. The mixed-quality,
+skill-heterogeneous regime the method targets does **not** exist in public
+demonstration datasets — it has to be *collected* (M2). Running on real data thus
+empirically motivates the low-barrier non-expert collection step — an honest signal
+the synthetic sanity check cannot provide. Figures: `outputs/*_pusht.png`,
+`outputs/*_aloha.png`.
 
 ## Quickstart
 
