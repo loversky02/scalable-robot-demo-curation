@@ -31,6 +31,8 @@ from pathlib import Path
 
 import numpy as np
 
+np.seterr(all="ignore")   # benign fp noise from BLAS on near-rank-deficient kernels
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from robocurate import (  # noqa: E402

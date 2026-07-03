@@ -29,8 +29,7 @@ def cosine_similarity_matrix(embeddings: np.ndarray) -> np.ndarray:
     """Return the NxN cosine-similarity Gram matrix (always PSD)."""
     X = np.asarray(embeddings, dtype=float)
     norms = np.linalg.norm(X, axis=1, keepdims=True)
-    norms = np.where(norms < 1e-12, 1.0, norms)
-    Xn = X / norms
+    Xn = X / np.maximum(norms, 1e-6)             # floor divisor -> bounds Xn, no blow-up
     S = Xn @ Xn.T
     return np.clip(S, -1.0, 1.0)
 
@@ -81,7 +80,9 @@ def greedy_map(L: np.ndarray, k: int, eps: float = 1e-10, return_gains: bool = F
         else:
             dot = np.zeros(n)
         denom = np.sqrt(max(di2[last], eps))
-        e = (L[last, :] - dot) / denom
+        # cap + sanitize so the recurrence stays finite on near-rank-deficient
+        # (near-duplicate) kernels; well-conditioned inputs are unaffected.
+        e = np.nan_to_num(np.clip((L[last, :] - dot) / denom, -1e6, 1e6))
         C[t - 1, :] = e
         di2 = di2 - e ** 2
         masked = np.where(chosen, -np.inf, di2)

@@ -20,7 +20,8 @@ useful through automatic informativeness-aware curation?*
 | **M2.5** | reward-free proxy-q, non-circular study            | ✅ done, offline (synthetic) |
 | **M1.5** | run on public datasets (PushT, ALOHA-sim)          | ✅ done — real results in `outputs/`, see below |
 | **M2**   | low-barrier collection + real-env mixed pool       | ✅ collector + real-env result (below); human mode ready |
-| **M3**   | downstream Diffusion Policy (curated vs random)    | ⬜ planned |
+| **M3-lite** | downstream BC-MLP probe (curated vs random)     | 🚧 scaffolded + pipeline-verified; needs human demos for signal |
+| **M3-full** | downstream Diffusion Policy                     | ⬜ future (needs image-obs PushT + GPU) |
 
 > ⚠️ The results below are a **controlled synthetic sanity check** — they verify
 > the method and reproduce the expected failure modes, and are **not**
@@ -191,6 +192,10 @@ python experiments/collect_pusht.py --mode scripted --per-tier 25   # real gym_p
 python experiments/build_mixed_pusht.py --n-expert 40               # + real human experts -> mixed pool
 python experiments/proxy_vs_oracle.py --source collected --path data/mixed_pusht.npz
 # python experiments/collect_pusht.py --mode human --operator-mode expert  # mouse teleop (local display)
+
+# 4) M3-lite -- downstream BC-MLP probe, evaluated by gym_pusht rollout
+python experiments/m3_bc_probe.py --paths data/collected_pusht.npz             # pipeline smoke test
+# with real human demos: --paths data/human_pusht.npz data/collected_pusht.npz
 ```
 
 ## Method details
@@ -223,10 +228,15 @@ python experiments/proxy_vs_oracle.py --source collected --path data/mixed_pusht
       mouse-teleop collector (`--mode human`) + scripted tiers; built a real
       mixed-quality pool (human experts + scripted low-skill) where curation pays
       off and the reward-free proxy becomes informative (see *M2 result* above).
-- [ ] **M3 — downstream policy**: train Diffusion Policy on the *mixed-quality*
-      pool, `random-K` vs `diversity-only-K` vs `DPP-K` (K=10/25/50, same budget,
-      multiple seeds, error bars; RunPod preferred near a deadline). Honest about
-      null results on clean pools — curation earns its keep on noisy ones.
+- [x] **M3-lite — downstream BC probe** (scaffolded + verified): a small BC-MLP
+      trained on `curated-K` vs `random-K` vs `diversity-K` subsets, evaluated by
+      **gym_pusht rollout** (`experiments/m3_bc_probe.py`) — the cleanest
+      non-circular signal (policy success ≠ the reward used to curate). Pipeline
+      verified end-to-end on scripted demos. A real result needs a *consistent-obs*
+      pool: collect human demos via `collect_pusht.py --mode human` (5-D state) +
+      scripted low-skill, then `m3_bc_probe.py --paths human.npz scripted.npz`.
+- [ ] **M3-full — Diffusion Policy** (future): needs image-observation PushT + GPU;
+      the state-only `lerobot/pusht` (2-D agent obs) is not policy-trainable alone.
 
 ## Honest limitations
 
@@ -270,6 +280,7 @@ experiments/
   proxy_vs_oracle.py    the 6-selector study (synthetic / pusht / aloha / collected)
   collect_pusht.py      M2 collector: mouse-teleop + scripted, real gym_pusht
   build_mixed_pusht.py  M2: human experts + scripted low-skill -> mixed pool
+  m3_bc_probe.py        M3-lite: BC-MLP on curated vs random -> gym_pusht rollout
 tests/              31 tests, offline, ~0.1s
 data/               collected/built pools (.npz)
 outputs/            generated CSV + figures
