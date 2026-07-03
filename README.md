@@ -12,6 +12,21 @@
 **Research question:** *Can cheap, non-expert human demonstrations be made more
 useful through automatic informativeness-aware curation?*
 
+## Status
+
+| stage | what | state |
+|-------|------|-------|
+| **M1**   | quality×diversity DPP engine + ablation            | ✅ done, offline-verified (31 tests) |
+| **M2.5** | reward-free proxy-q, non-circular study            | ✅ done, offline (synthetic) |
+| **M1.5** | run on public datasets (PushT, ALOHA-sim)          | ⏳ one command — `--source pusht` |
+| **M2**   | mouse-teleop non-expert collection                 | ⬜ planned |
+| **M3**   | downstream Diffusion Policy (curated vs random)    | ⬜ planned |
+
+> ⚠️ The results below are a **controlled synthetic sanity check** — they verify
+> the method and reproduce the expected failure modes, and are **not**
+> robot-learning evidence. Public-dataset (PushT / ALOHA-sim) results are the
+> validation step (M1.5).
+
 ---
 
 ## The idea in one figure
@@ -104,8 +119,9 @@ pip install -r requirements.txt          # numpy + matplotlib only
 bash scripts/verify_offline.sh
 
 # 2) real data (needs the optional extras: pip install lerobot torch)
-python experiments/run_ablation.py --source pusht
-python experiments/run_ablation.py --source aloha   # cross-dataset hedge
+python experiments/run_ablation.py --source pusht          # M1.5: 4-selector ablation
+python experiments/proxy_vs_oracle.py --source pusht        # M1.5: 6-selector proxy-q study
+python experiments/proxy_vs_oracle.py --source aloha        # cross-dataset hedge
 ```
 
 ## Method details
