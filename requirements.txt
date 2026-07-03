@@ -1,0 +1,8 @@
+# Core (offline verification + synthetic ablation): this is all Milestone 1 needs.
+numpy>=1.24
+matplotlib>=3.7
+
+# Optional real-data extras (uncomment to run --source pusht / aloha).
+# These pull in torch and are NOT required for the offline verification.
+# lerobot>=0.1
+# torch>=2.2
