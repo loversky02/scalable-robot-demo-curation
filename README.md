@@ -24,7 +24,7 @@ recover useful data from noisy human inputs?*
 | **M2**   | low-barrier collection + real-env mixed pool       | ✅ collector + real-env result (below); human mode ready |
 | **M3-lite** | downstream BC-MLP probe (gym_pusht rollout)      | ✅ done — non-circular result (below): quality×diversity ≈ 2.2× random |
 | **M3-full** | downstream Diffusion Policy                     | ⬜ future (needs image-obs PushT + GPU) |
-| **Pilot** | small **real** mouse-teleop human collection      | ✅ done — 16 real human demos; DPP proxy-q ≈ 2× random (below) |
+| **Pilot** | small **real** mouse-teleop human collection      | ✅ done — 32 real demos; pipeline + mixed-quality shown, DPP top selector (modest at this scale) |
 
 > ⚠️ The synthetic results are a **controlled sanity check** (they verify the method
 > and reproduce the failure modes); the public-dataset, real-env, and downstream
@@ -250,31 +250,35 @@ Outputs (`outputs/`): `human_pilot_quality_distribution.png` (non-expert data is
 mixed-quality), `human_pilot_selector_composition.png` (what curation keeps, per
 operator), `human_pilot_pareto.png` (quality vs diversity of the curated set).
 
-### Pilot result (16 real mouse demos)
+### Pilot result (32 real mouse demos, two rounds)
 
-A first pilot — 16 demos collected by mouse (careful + rushed) — already shows the
-core claim on **real human data**:
+A small pilot — 32 demos collected by mouse over two rounds — validates the pipeline
+on **real human data**, and is honest about a pilot's limits:
 
-- The data is genuinely **mixed-quality**: task reward spans **0.0–0.67**, and
-  self-labeled effort (careful vs rushed) does **not** cleanly predict quality for a
-  novice — you need automatic quality assessment, not just "please be careful"
-  (`human_pilot_quality_distribution.png`).
-- The **reward-free proxy tracks reward** on real human kinematics (proxy–reward
-  correlation ≈ **0.36**) — the kinematic signal is usable on human trajectories.
-- **Curation recovers the good demos**: selecting K=8 of 16 by quality×diversity
-  (DPP proxy-q) yields a selected-set mean reward of **0.371 vs 0.185 for random**
-  (≈ 2×), while diversity-only ≈ random.
+- **The pipeline runs end-to-end on real human input**, and the data is genuinely
+  **mixed-quality**: task reward spans **0.0–0.71**, and self-labeled effort (careful
+  vs rushed) does **not** cleanly predict quality for a novice → automatic quality
+  assessment is needed, not just "please be careful"
+  (`human_pilot_quality_distribution.png`). *This is the robust finding.*
+- On the full pool, **DPP proxy-q is the top selector** — K=12 of 32 gives a
+  selected-set mean reward of **0.369 vs 0.296 for random** (above quality-only 0.273
+  and diversity-only 0.289). But the effect is **modest and noisy at this scale**:
+  the ranking flips across 16-demo sub-samples, and the reward-free proxy is only
+  weakly correlated with reward here (≈ 0.1). The **strong** curation evidence is the
+  larger-scale M2 / M3-lite results above, not this tiny pilot.
 
-| selector (K=8 of 16) | selected mean reward ↑ |
-|----------------------|:----------------------:|
-| random               | 0.185                  |
-| diversity-only       | 0.184                  |
-| quality-only (proxy-q)| 0.334                 |
-| **DPP proxy-q**      | **0.371**              |
+| selector (K=12 of 32) | selected mean reward ↑ |
+|-----------------------|:----------------------:|
+| random                | 0.296                  |
+| quality-only (proxy-q)| 0.273                  |
+| diversity-only        | 0.289                  |
+| **DPP proxy-q**       | **0.369**              |
 
-> Honesty: a **16-demo, single-operator pilot** to validate the pipeline end-to-end
-> on real human input — not a statistically powered study. It closes the loop: cheap
-> mouse teleop → noisy human demos → reward-free curation → recovered useful data.
+> Honesty: a 32-demo, single-operator pilot to validate the pipeline end-to-end on
+> real human input — **not** a statistically powered study. Its robust contribution
+> is the *collection loop* (cheap mouse teleop → noisy human demos → reward-free
+> curation) and the mixed-quality evidence; the curation effect at this scale is
+> small and would need a larger, multi-operator collection to quantify.
 
 ## Quickstart
 
