@@ -99,7 +99,7 @@ def _pairs(states, actions, idx):
     return np.concatenate(obs), np.concatenate(act)
 
 
-def run(paths, k, epochs, eval_eps, max_steps):
+def run(paths, k, epochs, eval_eps, max_steps, seeds):
     pool = load_and_merge(paths)
     emb, reward, states, actions = (pool["embeddings"], pool["reward"],
                                     pool["states"], pool["actions"])
@@ -117,16 +117,24 @@ def run(paths, k, epochs, eval_eps, max_steps):
     }
 
     print(f"[data] {pool['name']}: N={n} demos, K={k}, "
-          f"pool mean reward {reward.mean():.3f}")
-    print(f"{'training subset':26s} {'subset reward':>13s} {'rollout reward':>15s} {'rollout succ':>13s}")
+          f"pool mean reward {reward.mean():.3f} ({seeds} seeds)")
+    print(f"{'training subset':26s} {'subset rew':>10s} {'rollout reward (mean±std)':>26s}")
     rows = []
-    for name, idx in subsets.items():
-        obs, act = _pairs(states, actions, idx)
-        model, om, os_ = build_bc(obs, act, epochs=epochs, seed=0)
-        mr, ms = rollout(make_policy(model, om, os_), eval_eps, max_steps)
-        subset_r = float(np.mean(reward[np.asarray(idx)]))
-        rows.append((name, subset_r, mr, ms))
-        print(f"{name:26s} {subset_r:13.3f} {mr:15.3f} {ms:13.3f}")
+    for name, idx0 in subsets.items():
+        rr, srs = [], []
+        for s in range(seeds):
+            # random baseline draws a fresh subset each seed (averaged over draws);
+            # curated/diversity subsets are deterministic.
+            idx = (select_random(n, k, np.random.default_rng(100 + s))
+                   if name == "random-K" else idx0)
+            obs, act = _pairs(states, actions, idx)
+            model, om, os_ = build_bc(obs, act, epochs=epochs, seed=s)
+            mr, _ = rollout(make_policy(model, om, os_), eval_eps, max_steps,
+                            seed0=5000 + 137 * s)
+            rr.append(mr); srs.append(float(np.mean(reward[np.asarray(idx)])))
+        mean, std = float(np.mean(rr)), float(np.std(rr))
+        rows.append((name, float(np.mean(srs)), mean, std))
+        print(f"{name:26s} {np.mean(srs):10.3f} {mean:16.3f} ± {std:.3f}")
 
     _plot(rows, k, pool["name"])
     return rows
@@ -142,10 +150,11 @@ def _plot(rows, k, name):
     out.mkdir(parents=True, exist_ok=True)
     labels = [r[0].replace(": ", "\n") for r in rows]
     fig, ax = plt.subplots(figsize=(8, 4.3))
-    ax.bar(range(len(rows)), [r[2] for r in rows],
-           color=["tab:gray", "tab:blue", "tab:red", "tab:green"], edgecolor="k")
+    ax.bar(range(len(rows)), [r[2] for r in rows], yerr=[r[3] for r in rows],
+           capsize=5, color=["tab:gray", "tab:blue", "tab:red", "tab:green"],
+           edgecolor="k")
     ax.set_xticks(range(len(rows))); ax.set_xticklabels(labels, fontsize=8)
-    ax.set_ylabel("rollout reward of trained BC policy")
+    ax.set_ylabel("rollout reward of trained BC policy (mean ± std)")
     ax.set_title(f"M3-lite: downstream policy vs training subset (K={k})\n{name}")
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
@@ -161,8 +170,9 @@ def main():
     ap.add_argument("--epochs", type=int, default=120)
     ap.add_argument("--eval-eps", type=int, default=15)
     ap.add_argument("--max-steps", type=int, default=150)
+    ap.add_argument("--seeds", type=int, default=3)
     args = ap.parse_args()
-    run(args.paths, args.k, args.epochs, args.eval_eps, args.max_steps)
+    run(args.paths, args.k, args.epochs, args.eval_eps, args.max_steps, args.seeds)
 
 
 if __name__ == "__main__":

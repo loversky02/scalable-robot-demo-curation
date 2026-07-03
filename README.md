@@ -20,7 +20,7 @@ useful through automatic informativeness-aware curation?*
 | **M2.5** | reward-free proxy-q, non-circular study            | ✅ done, offline (synthetic) |
 | **M1.5** | run on public datasets (PushT, ALOHA-sim)          | ✅ done — real results in `outputs/`, see below |
 | **M2**   | low-barrier collection + real-env mixed pool       | ✅ collector + real-env result (below); human mode ready |
-| **M3-lite** | downstream BC-MLP probe (curated vs random)     | 🚧 scaffolded + pipeline-verified; needs human demos for signal |
+| **M3-lite** | downstream BC-MLP probe (gym_pusht rollout)      | ✅ done — non-circular result (below): quality×diversity ≈ 2.2× random |
 | **M3-full** | downstream Diffusion Policy                     | ⬜ future (needs image-obs PushT + GPU) |
 
 > ⚠️ The results below are a **controlled synthetic sanity check** — they verify
@@ -173,6 +173,39 @@ proxy-q — is the only method high on both axes**, with 0% noisy picks. Figures
 > (a *simulated* non-expert pool). The `--mode human` collector gathers genuine
 > non-expert demos — swap them in and re-run the same study unchanged.
 
+## M3-lite result: curation helps the *downstream policy* (non-circular)
+
+The offline results (M2) show curation *picks* good, diverse demos. M3 asks the
+real question: does a policy **trained** on curated data actually perform better?
+`experiments/m3_bc_probe.py` trains a small behaviour-cloning MLP on curated-K /
+random-K / diversity-K subsets and scores each by **rolling out in gym_pusht**.
+Rollout reward is a different quantity from the offline reward used to curate, so
+this is the cleanest **non-circular** evidence in the project.
+
+On a 90-demo pool of scripted PushT attempts (real gym_pusht reward, naturally
+spread 0.0–0.81 — the "most attempts miss" structure of low-cost collection),
+K=30, 5 training seeds (random re-drawn per seed):
+
+| training subset (K=30)          | subset reward | rollout reward (mean ± std) |
+|---------------------------------|:-------------:|:---------------------------:|
+| random-K                        | 0.166         | 0.113 ± 0.028               |
+| diversity-only-K                | 0.234         | 0.105 ± 0.016               |
+| reward-only-K (DPP reward-q)    | **0.401**     | 0.107 ± 0.019               |
+| **quality×diversity (DPP proxy-q)** | 0.178     | **0.247 ± 0.032**           |
+
+The finding is sharp and **non-obvious**: selecting the *highest-reward* demos
+(reward-q, subset reward 0.40) gives **no** downstream benefit (0.107 ≈ random) —
+they are redundant, so the BC policy overfits. Diversity alone also fails (0.105).
+Only the **reward-free quality×diversity** selection trains a policy that
+generalizes — ≈ 2.2× random, gap well beyond seed variance. *Diversity is what the
+downstream policy needs.* Figure: `outputs/m3_bc_probe.png`.
+
+> Honesty: a lightweight BC-MLP probe on *scripted* attempts (PushT is too hard to
+> script into clean experts, so we use the natural reward spread of many attempts).
+> Rollout *success* is 0 for all (imperfect demos) — the metric is rollout coverage
+> reward. Real human demos (`--mode human`) and a stronger policy are future work;
+> the pipeline is unchanged.
+
 ## Quickstart
 
 ```bash
@@ -228,13 +261,13 @@ python experiments/m3_bc_probe.py --paths data/collected_pusht.npz             #
       mouse-teleop collector (`--mode human`) + scripted tiers; built a real
       mixed-quality pool (human experts + scripted low-skill) where curation pays
       off and the reward-free proxy becomes informative (see *M2 result* above).
-- [x] **M3-lite — downstream BC probe** (scaffolded + verified): a small BC-MLP
-      trained on `curated-K` vs `random-K` vs `diversity-K` subsets, evaluated by
-      **gym_pusht rollout** (`experiments/m3_bc_probe.py`) — the cleanest
-      non-circular signal (policy success ≠ the reward used to curate). Pipeline
-      verified end-to-end on scripted demos. A real result needs a *consistent-obs*
-      pool: collect human demos via `collect_pusht.py --mode human` (5-D state) +
-      scripted low-skill, then `m3_bc_probe.py --paths human.npz scripted.npz`.
+- [x] **M3-lite — downstream BC probe** (done): a small BC-MLP trained on
+      `curated-K` vs `random-K` vs `diversity-K` subsets, scored by **gym_pusht
+      rollout** (`experiments/m3_bc_probe.py`) — non-circular (rollout reward ≠ the
+      reward used to curate). Result: reward-free quality×diversity curation ≈ 2.2×
+      random downstream, while reward-only and diversity-only do not beat random
+      (see *M3-lite result*). Swap in real human demos (`--mode human`) to
+      strengthen it.
 - [ ] **M3-full — Diffusion Policy** (future): needs image-observation PushT + GPU;
       the state-only `lerobot/pusht` (2-D agent obs) is not policy-trainable alone.
 

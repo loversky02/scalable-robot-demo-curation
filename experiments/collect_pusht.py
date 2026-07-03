@@ -44,14 +44,14 @@ def expert_action(obs: np.ndarray) -> np.ndarray:
     agent, block = obs[:2], obs[2:4]
     to_goal = GOAL - block
     d = np.linalg.norm(to_goal)
-    if d < 1e-3:
+    if d < 5.0:
         return GOAL.astype(np.float32)
-    push_dir = to_goal / d
-    behind = block - push_dir * 40.0
-    if np.linalg.norm(agent - behind) > 30.0:
-        target = behind                    # get behind the block first
+    u = to_goal / d
+    behind = block - u * 35.0              # approach point just behind the block
+    if np.linalg.norm(agent - behind) > 22.0:
+        target = behind                    # first line up behind the block...
     else:
-        target = block + push_dir * 60.0   # push through it toward the goal
+        target = GOAL                      # ...then push straight through it to the goal
     return np.clip(target, 0.0, 512.0).astype(np.float32)
 
 
