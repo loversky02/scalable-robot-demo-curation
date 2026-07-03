@@ -50,6 +50,49 @@ def _temporal_pool(seq: np.ndarray) -> np.ndarray:
     )
 
 
+def compute_kinematic_features(actions: np.ndarray, states: np.ndarray | None = None):
+    """Cheap, REWARD-FREE per-episode quality signals from a trajectory.
+
+    Uses ONLY kinematics (never task reward / success / goal distance), so scoring
+    a selection with these and evaluating against reward stays non-circular:
+
+      * smoothness -- low action jerk  -> ``1 / (1 + mean|jerk|)``   (higher better)
+      * efficiency -- path straightness ``net_displacement / path_length``
+      * stability  -- fraction of non-reversing velocity steps
+      * duration   -- number of frames (raw; normalize across the pool)
+    """
+    a = np.asarray(actions, dtype=float)
+    if a.ndim == 1:
+        a = a[:, None]
+    T = len(a)
+
+    jerk = np.linalg.norm(np.diff(a, n=2, axis=0), axis=1).mean() if T >= 3 else 0.0
+    smoothness = 1.0 / (1.0 + float(jerk))
+
+    path = np.asarray(states, dtype=float) if states is not None else np.cumsum(a, axis=0)
+    if path.ndim == 1:
+        path = path[:, None]
+    vel = np.diff(path, axis=0)
+    vnorm = np.linalg.norm(vel, axis=1)
+    path_len = float(vnorm.sum())
+    net = float(np.linalg.norm(path[-1] - path[0]))
+    efficiency = net / path_len if path_len > 1e-9 else 0.0
+
+    if len(vel) >= 2:
+        u = vel / np.where(vnorm[:, None] < 1e-9, 1.0, vnorm[:, None])
+        cos = (u[1:] * u[:-1]).sum(axis=1)
+        stability = float(np.mean(cos >= 0))
+    else:
+        stability = 1.0
+
+    return {
+        "smoothness": smoothness,
+        "efficiency": float(efficiency),
+        "stability": stability,
+        "duration": float(T),
+    }
+
+
 def load_lerobot_pool(
     repo_id: str = "lerobot/pusht",
     state_key: str = "observation.state",
@@ -57,11 +100,15 @@ def load_lerobot_pool(
     reward_key: str = "next.reward",
     success_key: str = "next.success",
     limit: int | None = None,
+    return_kinematics: bool = False,
 ):
     """Return ``(embeddings[N, d], raw_quality[N])`` for one demonstration pool.
 
-    ``limit`` caps the number of episodes (handy for a quick smoke test).
-    Column names are configurable because they vary across LeRobot versions.
+    With ``return_kinematics=True`` returns a dict that additionally carries the
+    per-episode REWARD-FREE proxy signals (smoothness/efficiency/stability/
+    duration) and ``success`` -- everything the M1.5 / M2.5 proxy-q study needs on
+    real data. ``limit`` caps episodes (quick smoke test); column names are
+    configurable because they vary across LeRobot versions.
     """
     LeRobotDataset = _import_lerobot_dataset()
     ds = LeRobotDataset(repo_id)
@@ -81,7 +128,7 @@ def load_lerobot_pool(
     if limit is not None:
         episodes = episodes[:limit]
 
-    embeddings, quality = [], []
+    embeddings, quality, kin, succ = [], [], [], []
     for e in episodes:
         m = ep == e
         feats = [_temporal_pool(state[m])]
@@ -101,9 +148,27 @@ def load_lerobot_pool(
                 f"(columns: {hf.column_names})"
             )
 
+        if return_kinematics:
+            kin.append(
+                compute_kinematic_features(
+                    action[m] if action is not None else state[m], states=state[m]
+                )
+            )
+            succ.append(float(success[m].max()) if success is not None else float("nan"))
+
     X = np.asarray(embeddings, dtype=float)
     q = np.asarray(quality, dtype=float)
-    return X, q
+    if not return_kinematics:
+        return X, q
+    return {
+        "embeddings": X,
+        "reward": q,
+        "success": np.asarray(succ, dtype=float),
+        "smoothness": np.array([k["smoothness"] for k in kin]),
+        "efficiency": np.array([k["efficiency"] for k in kin]),
+        "stability": np.array([k["stability"] for k in kin]),
+        "duration": np.array([k["duration"] for k in kin]),
+    }
 
 
 def _main():

@@ -2,10 +2,12 @@
 
 **Low-cost human demonstration collection and informativeness-aware curation for robot learning.**
 
-> **Thesis.** Low-cost, non-expert demonstrations are *scalable but noisy*. This
-> project studies whether **quality-weighted diversity** curation can recover
-> useful demonstrations from such pools — reducing the human burden of data
-> collection without sacrificing policy-relevant data.
+> **Thesis.** Low-cost, non-expert demonstrations are *scalable but noisy*. Naive
+> diversity selection can over-select unusual-but-poor demonstrations, so
+> informativeness should combine **reward-free quality proxies with diversity**.
+> This project implements a **quality-weighted DPP** curation pipeline to recover
+> useful demonstrations from mixed-quality human data — reducing the human burden
+> of data collection without sacrificing policy-relevant data.
 
 **Research question:** *Can cheap, non-expert human demonstrations be made more
 useful through automatic informativeness-aware curation?*
@@ -66,21 +68,28 @@ the only method strong on *both* axes. See `outputs/`:
 
 Scoring the DPP with `q = reward` and then judging it by *selected-set reward*
 would be circular. So we also score with a **reward-free** proxy quality
-(kinematic `smoothness × efficiency`) and evaluate against the **held-out**
-reward — a signal the selector never saw:
+(kinematic `smoothness × efficiency × stability`) and evaluate against the
+**held-out** reward/success — signals the selector never saw. Six selectors on a
+three-tier `expert / clumsy / noisy` pool (`K=30`):
 
-| method (K=30)                 | held-out mean reward ↑ | % experts ↑ |
-|-------------------------------|:----------------------:|:-----------:|
-| random                        | 0.645                  | 0.67        |
-| diversity-only                | 0.226 ⚠️               | 0.13 ⚠️      |
-| **DPP (proxy-q, deployable)** | **0.840**              | 0.90        |
-| DPP (reward-q, oracle)        | 0.947                  | 1.00        |
+| selector                       | held-out reward ↑ | success ↑ | diversity ↑ | noisy % ↓ |
+|--------------------------------|:-----------------:|:---------:|:-----------:|:---------:|
+| random                         | 0.618             | 0.70      | 0.808       | 0.23      |
+| quality-only (reward-q)        | 0.989             | 1.00      | 0.638 ⚠️    | 0.00      |
+| quality-only (proxy-q)         | 0.930             | 1.00      | 0.664 ⚠️    | 0.00      |
+| diversity-only                 | 0.279 ⚠️          | 0.30 ⚠️   | **1.022**   | 0.67 ⚠️   |
+| **DPP (proxy-q, deployable)**  | **0.797**         | **1.00**  | **0.793**   | **0.00**  |
+| DPP (reward-q, oracle)         | 0.849             | 0.97      | 0.752       | 0.00      |
 
-The reward-free proxy recovers most of the oracle's advantage while never
-touching the reward (proxy–reward correlation ≈ 0.91 — a *good* proxy, not the
-metric itself). This mirrors the **deployable** setting: real low-cost, non-expert
-collection often has no reward function at all. Regenerate with
-`python experiments/proxy_vs_oracle.py` → `outputs/proxy_vs_oracle_synthetic.png`.
+The **reward-free** proxy-DPP reaches 100% held-out success with 0% noisy picks
+while staying diverse — it never reads the reward (proxy–reward correlation ≈ 0.94:
+a *good* proxy, not the metric itself). Quality-only maxes reward but is the least
+diverse (redundant); diversity-only is the most diverse but collapses to the noise
+(67% noisy, 30% success). This mirrors the **deployable** setting: real low-cost,
+non-expert collection often has no reward function at all. Figures in `outputs/`
+(regenerate with `python experiments/proxy_vs_oracle.py`):
+`selector_composition_synthetic.png`, `reward_free_proxy_vs_reward_synthetic.png`,
+`quality_diversity_pareto_synthetic.png`.
 
 > Note: `reward-q` is an oracle upper bound; `proxy-q` is the deployable setting.
 > The cleanest non-circular evidence of all is **M3** (downstream policy success),
@@ -168,11 +177,11 @@ robocurate/         core library (offline: numpy only)
   selectors.py      random / quality-only / diversity-only / dpp
   quality.py        reward proxy (oracle) + reward-free kinematic proxy
   metrics.py        mean quality, diversity spread, coverage, expert fraction
-  synthetic.py      controlled mixed-quality pools (test fixtures)
-  pusht.py          LeRobot adapter (PushT / ALOHA-sim) — guarded import
+  synthetic.py      controlled pools: M1 mixed pool + 3-tier labeled pool
+  pusht.py          LeRobot adapter + reward-free kinematic features (guarded)
 experiments/
   run_ablation.py       the M1 ablation driver (CSV + plots)
-  proxy_vs_oracle.py    the M2.5 non-circular check (reward-free proxy)
-tests/              27 tests, offline, ~0.1s
+  proxy_vs_oracle.py    the M2.5 6-selector non-circular study (3 figures)
+tests/              31 tests, offline, ~0.1s
 outputs/            generated CSV + figures
 ```
