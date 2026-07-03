@@ -31,6 +31,8 @@ from pathlib import Path
 import numpy as np
 
 TIERS = {"expert": 0, "clumsy": 1, "noisy": 2}
+# human-facing operator modes map to the same 0/1/2 codes
+MODE_CODE = {**TIERS, "careful": 0, "normal": 1, "rushed": 2}
 GOAL = np.array([256.0, 256.0], dtype=float)
 
 
@@ -111,7 +113,7 @@ def collect_human(n: int, operator_mode: str, max_steps: int, out: Path):
     import pygame
 
     env = gym.make("gym_pusht/PushT-v0", obs_type="state", render_mode="human")
-    tier = TIERS[operator_mode]
+    tier = MODE_CODE[operator_mode]
     win = 512
     states, actions, ep_reward, ep_success, modes = [], [], [], [], []
     for i in range(n):
@@ -158,7 +160,7 @@ def main():
     ap.add_argument("--mode", choices=["scripted", "human"], default="scripted")
     ap.add_argument("--per-tier", type=int, default=25)
     ap.add_argument("--n", type=int, default=10)
-    ap.add_argument("--operator-mode", choices=list(TIERS), default="expert")
+    ap.add_argument("--operator-mode", choices=list(MODE_CODE), default="careful")
     ap.add_argument("--max-steps", type=int, default=200)
     ap.add_argument("--out", default="data/collected_pusht.npz")
     args = ap.parse_args()

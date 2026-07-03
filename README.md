@@ -1,16 +1,18 @@
 # scalable-robot-demo-curation
 
-**Low-cost human demonstration collection and informativeness-aware curation for robot learning.**
+**A low-cost human demonstration collection + curation prototype for robot learning.**
 
-> **Thesis.** Low-cost, non-expert demonstrations are *scalable but noisy*. Naive
-> diversity selection can over-select unusual-but-poor demonstrations, so
-> informativeness should combine **reward-free quality proxies with diversity**.
-> This project implements a **quality-weighted DPP** curation pipeline to recover
-> useful demonstrations from mixed-quality human data — reducing the human burden
-> of data collection without sacrificing policy-relevant data.
+> **Thesis.** Expert teleoperation is expensive, so *scaling* demonstration data
+> means letting **non-experts** contribute through low-barrier interfaces — but that
+> data is **mixed-quality and noisy**. This is a small end-to-end pipeline for that
+> regime: a **low-cost mouse-teleoperation collector** for PushT, plus **reward-free
+> quality assessment** and **quality-weighted DPP curation** to recover the useful
+> demonstrations from a noisy non-expert pool. Curation is the quality-control
+> *module* — the focus is the low-barrier **collection → recovery** pipeline.
 
-**Research question:** *Can cheap, non-expert human demonstrations be made more
-useful through automatic informativeness-aware curation?*
+**Research question:** *When low-barrier interfaces let non-experts contribute
+demonstrations, can reward-free quality assessment and quality-weighted diversity
+recover useful data from noisy human inputs?*
 
 ## Status
 
@@ -22,15 +24,37 @@ useful through automatic informativeness-aware curation?*
 | **M2**   | low-barrier collection + real-env mixed pool       | ✅ collector + real-env result (below); human mode ready |
 | **M3-lite** | downstream BC-MLP probe (gym_pusht rollout)      | ✅ done — non-circular result (below): quality×diversity ≈ 2.2× random |
 | **M3-full** | downstream Diffusion Policy                     | ⬜ future (needs image-obs PushT + GPU) |
+| **Pilot** | small **real** mouse-teleop human collection      | ⏳ collector + report ready — run after collecting ~15 demos |
 
-> ⚠️ The results below are a **controlled synthetic sanity check** — they verify
-> the method and reproduce the expected failure modes, and are **not**
-> robot-learning evidence. Public-dataset (PushT / ALOHA-sim) results are the
-> validation step (M1.5).
+> ⚠️ The synthetic results are a **controlled sanity check** (they verify the method
+> and reproduce the failure modes); the public-dataset, real-env, and downstream
+> results are the evidence. The **human pilot** is the collection-first validation
+> and is the one remaining step (needs ~15 min of mouse demos).
 
 ---
 
-## The idea in one figure
+## The pipeline (collection-first)
+
+1. **Motivation** — expert teleoperation needs skilled operators, special hardware,
+   and time. Non-expert collection is scalable but **noisy**.
+2. **System** — a **mouse-teleoperation** interface for PushT
+   (`experiments/collect_pusht.py --mode human`): the agent follows the cursor, so a
+   non-expert contributes a demo with a mouse. Each episode logs
+   `reward, success, duration, operator_mode` (careful / normal / rushed) and, at
+   load time, reward-free kinematics (smoothness / efficiency / stability).
+3. **Data issue** — the pool is **mixed-quality** (careful vs rushed attempts differ).
+4. **Quality control** — a **reward-free proxy** scores each demo from kinematics
+   only (deployable when there is no reward function) — the same signal family as
+   [DQAF (Closing the Loop in Teleoperation, 2026)](https://arxiv.org/abs/2605.26349).
+5. **Curation** — a **quality-weighted DPP** keeps demos that are both good *and*
+   diverse (the module below).
+6. **Evidence** — public datasets (M1.5), a real-env mixed pool (M2), and a
+   downstream BC rollout check (M3-lite).
+7. **Human pilot** — a small real mouse-teleop collection validates it end-to-end.
+
+---
+
+## Curation module: informativeness = quality × diversity
 
 Not all demonstrations are equally useful, and **the two obvious heuristics both
 fail on low-cost data**:
@@ -206,6 +230,29 @@ downstream policy needs.* Figure: `outputs/m3_bc_probe.png`.
 > reward. Real human demos (`--mode human`) and a stronger policy are future work;
 > the pipeline is unchanged.
 
+## Human pilot — the collection-first validation
+
+Everything above uses public datasets or scripted attempts. The one step that makes
+this touch *human* demonstrations is a **small real pilot** through the mouse
+collector — the standard validation in this space (RoboCrowd situates a collector in
+public; DQAF validates with a 3-novice pilot), **not** a large user study. Collect
+~15 demos at a couple of effort levels, then one command builds the report:
+
+```bash
+# on your Mac (needs a display); one run per operator mode:
+python experiments/collect_pusht.py --mode human --operator-mode careful --n 8 --out data/pilot_careful.npz
+python experiments/collect_pusht.py --mode human --operator-mode rushed  --n 8 --out data/pilot_rushed.npz
+# quality distribution + selector composition + quality-diversity pareto:
+python experiments/human_pilot_report.py --paths data/pilot_careful.npz data/pilot_rushed.npz
+```
+
+Outputs (`outputs/`): `human_pilot_quality_distribution.png` (non-expert data is
+mixed-quality), `human_pilot_selector_composition.png` (what curation keeps, per
+operator), `human_pilot_pareto.png` (quality vs diversity of the curated set).
+
+> Honesty: a **pilot to validate the collection pipeline, not a statistically
+> powered user study**.
+
 ## Quickstart
 
 ```bash
@@ -285,12 +332,20 @@ python experiments/m3_bc_probe.py --paths data/collected_pusht.npz             #
 
 ## Relation to prior work
 
-- **Data Scaling Laws in Imitation Learning** (Lin et al., ICLR 2025) — motivates
-  efficient collection; we study *which* demos to keep.
-- **Robot Data Curation with Mutual Information Estimators** (2025) — a parallel
-  take on demonstration informativeness.
-- **Universal Manipulation Interface / UMI** (Chi et al., 2024) — low-cost,
-  robot-free collection; our M2 collector is the same spirit at PushT scale.
+**Collection (the topic's core).**
+- **UMI / FastUMI / DexWild** (Chi et al. 2024; 2025) — low-cost, robot-free,
+  portable interfaces for non-expert collection; our mouse-teleop collector is the
+  same spirit at PushT scale.
+- **RoboCrowd / RoboTurk** — crowdsourcing demonstrations from non-experts, and the
+  incentive/quality problems that come with it.
+
+**Quality control + curation (this repo's module).**
+- **DQAF — Closing the Loop in Teleoperation** (2026) — scores teleop episodes from
+  smoothness / stalls / kinematic limits; our reward-free proxy uses the same signal
+  family, for *selection* rather than operator feedback.
+- **Robomimic** — demonstrator proficiency and diversity matter as much as raw scale.
+- **Data Scaling Laws** (Lin et al., ICLR 2025) and **Robot Data Curation with MI
+  Estimators** (2025) — efficient collection / demonstration informativeness.
 
 *Design note:* the quality×diversity DPP is a natural fit for demonstration
 selection — the determinantal *diversity* term is the discrete cousin of
@@ -311,7 +366,8 @@ robocurate/         core library (offline: numpy only)
 experiments/
   run_ablation.py       the M1 ablation driver (CSV + plots)
   proxy_vs_oracle.py    the 6-selector study (synthetic / pusht / aloha / collected)
-  collect_pusht.py      M2 collector: mouse-teleop + scripted, real gym_pusht
+  collect_pusht.py      collector: mouse-teleop (human) + scripted, real gym_pusht
+  human_pilot_report.py human pilot: quality distribution + composition + pareto
   build_mixed_pusht.py  M2: human experts + scripted low-skill -> mixed pool
   m3_bc_probe.py        M3-lite: BC-MLP on curated vs random -> gym_pusht rollout
 tests/              31 tests, offline, ~0.1s
