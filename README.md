@@ -19,7 +19,7 @@ useful through automatic informativeness-aware curation?*
 | **M1**   | quality×diversity DPP engine + ablation            | ✅ done, offline-verified (31 tests) |
 | **M2.5** | reward-free proxy-q, non-circular study            | ✅ done, offline (synthetic) |
 | **M1.5** | run on public datasets (PushT, ALOHA-sim)          | ✅ done — real results in `outputs/`, see below |
-| **M2**   | mouse-teleop non-expert collection                 | ⬜ planned |
+| **M2**   | low-barrier collection + real-env mixed pool       | ✅ collector + real-env result (below); human mode ready |
 | **M3**   | downstream Diffusion Policy (curated vs random)    | ⬜ planned |
 
 > ⚠️ The results below are a **controlled synthetic sanity check** — they verify
@@ -142,6 +142,36 @@ empirically motivates the low-barrier non-expert collection step — an honest s
 the synthetic sanity check cannot provide. Figures: `outputs/*_pusht.png`,
 `outputs/*_aloha.png`.
 
+## M2 result: curation pays off on a real-env mixed-quality pool
+
+Public expert datasets are too clean (M1.5), so we *build* the mixed-quality regime
+the method targets, through the real `gym_pusht` simulator.
+`experiments/collect_pusht.py` has a **mouse-teleoperation** mode (the low-barrier
+non-expert interface) and a **scripted** mode. Naive scripted heuristics can't push
+PushT well (it needs a learned policy), so `experiments/build_mixed_pusht.py` forms
+an honest pool with a large *real* reward gap: **real human expert demos**
+(`lerobot/pusht`, reward ≈ 0.90) + **scripted low-skill** demos (real gym_pusht,
+reward ≈ 0.15). On this 90-demo pool the thesis holds with real simulator reward:
+
+| selector (K=30)              | held-out reward ↑ | diversity ↑ | noisy % ↓ |
+|------------------------------|:-----------------:|:-----------:|:---------:|
+| random                       | 0.439             | 1.019       | 0.37      |
+| diversity-only               | 0.439 ⚠️          | 1.018       | 0.33 ⚠️   |
+| quality-only (reward-q)      | 0.908             | 0.701       | 0.00      |
+| **DPP (proxy-q, deployable)**| **0.830**         | **0.826**   | **0.00**  |
+| DPP (reward-q, oracle)       | 0.759             | 0.977       | 0.00      |
+
+Here the reward-free proxy is **informative** (proxy–reward correlation ≈ 0.90, vs
+0.09 on clean PushT): heterogeneous skill gives kinematics something to capture.
+Diversity-only gains nothing over random (it chases the scattered low-skill demos);
+quality-only recovers reward but is least diverse; **DPP — even reward-free
+proxy-q — is the only method high on both axes**, with 0% noisy picks. Figures:
+`outputs/*_collected.png`.
+
+> Honesty: the expert tier is real human teleop; the low-skill tiers are scripted
+> (a *simulated* non-expert pool). The `--mode human` collector gathers genuine
+> non-expert demos — swap them in and re-run the same study unchanged.
+
 ## Quickstart
 
 ```bash
@@ -154,6 +184,13 @@ bash scripts/verify_offline.sh
 python experiments/run_ablation.py --source pusht          # M1.5: 4-selector ablation
 python experiments/proxy_vs_oracle.py --source pusht        # M1.5: 6-selector proxy-q study
 python experiments/proxy_vs_oracle.py --source aloha        # cross-dataset hedge
+
+# 3) M2 -- build a real-env mixed-quality pool and run the study on it
+#    (collector extras: pip install gym_pusht pygame "pymunk<7")
+python experiments/collect_pusht.py --mode scripted --per-tier 25   # real gym_pusht low-skill demos
+python experiments/build_mixed_pusht.py --n-expert 40               # + real human experts -> mixed pool
+python experiments/proxy_vs_oracle.py --source collected --path data/mixed_pusht.npz
+# python experiments/collect_pusht.py --mode human --operator-mode expert  # mouse teleop (local display)
 ```
 
 ## Method details
@@ -182,11 +219,10 @@ python experiments/proxy_vs_oracle.py --source aloha        # cross-dataset hedg
       Finding: public data is homogeneous expert, so curation gains are small and
       the reward-free proxy is uninformative — which empirically motivates M2.
       See **Real-data findings** above; figures in `outputs/*_pusht.png`, `*_aloha.png`.
-- [ ] **M2 — low-barrier collection**: mouse teleoperation of PushT (its native
-      control) so a *non-expert* can contribute demos. Self-collect an
-      `expert / clumsy / noisy` pool — *a simulated non-expert pool, not a user
-      study* — logged in LeRobot format with `reward, success, smoothness,
-      duration, operator_mode`.
+- [x] **M2 — low-barrier collection + real-env mixed pool** (done): `gym_pusht`
+      mouse-teleop collector (`--mode human`) + scripted tiers; built a real
+      mixed-quality pool (human experts + scripted low-skill) where curation pays
+      off and the reward-free proxy becomes informative (see *M2 result* above).
 - [ ] **M3 — downstream policy**: train Diffusion Policy on the *mixed-quality*
       pool, `random-K` vs `diversity-only-K` vs `DPP-K` (K=10/25/50, same budget,
       multiple seeds, error bars; RunPod preferred near a deadline). Honest about
@@ -228,9 +264,13 @@ robocurate/         core library (offline: numpy only)
   metrics.py        mean quality, diversity spread, coverage, expert fraction
   synthetic.py      controlled pools: M1 mixed pool + 3-tier labeled pool
   pusht.py          LeRobot adapter + reward-free kinematic features (guarded)
+  collected.py      loader for an M2 collected/built mixed-quality pool (.npz)
 experiments/
   run_ablation.py       the M1 ablation driver (CSV + plots)
-  proxy_vs_oracle.py    the M2.5 6-selector non-circular study (3 figures)
+  proxy_vs_oracle.py    the 6-selector study (synthetic / pusht / aloha / collected)
+  collect_pusht.py      M2 collector: mouse-teleop + scripted, real gym_pusht
+  build_mixed_pusht.py  M2: human experts + scripted low-skill -> mixed pool
 tests/              31 tests, offline, ~0.1s
+data/               collected/built pools (.npz)
 outputs/            generated CSV + figures
 ```

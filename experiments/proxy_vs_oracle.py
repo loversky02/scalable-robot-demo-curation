@@ -55,18 +55,23 @@ STYLE = {
 }
 
 
-def load_pool(source: str, limit: int | None):
-    if source == "synthetic":
-        p = make_labeled_pool(seed=0)
-        p["name"] = "synthetic 3-tier pool"
-        p["reward_available"] = True
+def load_pool(source: str, limit: int | None, path: str | None = None):
+    if source in ("synthetic", "collected"):
+        if source == "synthetic":
+            p = make_labeled_pool(seed=0)
+            p["name"] = "synthetic 3-tier pool"
+            p["reward_available"] = True
+        else:
+            from robocurate.collected import load_collected_pool
+            p = load_collected_pool(path)
+        tier = p["tier"]
         p["groups"] = [
-            ("expert", "tab:green", p["tier"] == EXPERT),
-            ("clumsy", "gold", p["tier"] == CLUMSY),
-            ("noisy", "tab:red", p["tier"] == NOISY),
+            ("expert", "tab:green", tier == EXPERT),
+            ("clumsy", "gold", tier == CLUMSY),
+            ("noisy", "tab:red", tier == NOISY),
         ]
         p["bad_label"] = "noisy%"
-        p["bad_mask"] = p["tier"] == NOISY
+        p["bad_mask"] = tier == NOISY
         return p
 
     from robocurate.pusht import load_lerobot_pool  # guarded import
@@ -79,9 +84,9 @@ def load_pool(source: str, limit: int | None):
 
 
 def run(source: str = "synthetic", k: int = 30, limit: int | None = None,
-        out_dir: Path | None = None):
+        path: str | None = None, out_dir: Path | None = None):
     out_dir = Path(out_dir or Path(__file__).resolve().parents[1] / "outputs")
-    p = load_pool(source, limit)
+    p = load_pool(source, limit, path)
     X, reward, success = p["embeddings"], p["reward"], p["success"]
     n = len(X)
     k = min(k, n - 1)
@@ -93,8 +98,8 @@ def run(source: str = "synthetic", k: int = 30, limit: int | None = None,
     escore = reward if reward_avail else q_proxy
     p["escore_name"] = "held-out reward" if reward_avail else "proxy score (no reward in dataset)"
 
-    # composition groups (terciles of the evaluation score) for real datasets
-    if source != "synthetic":
+    # composition groups (terciles of the evaluation score) when not preset by the pool
+    if "groups" not in p:
         lo, hi = np.nanquantile(escore, [1 / 3, 2 / 3])
         terc = np.digitize(escore, [lo, hi])
         hi_name = "high-reward" if reward_avail else "high-proxy"
@@ -225,11 +230,13 @@ def _plot(M, p, source, k, corr):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default="synthetic",
-                    choices=["synthetic", "pusht", "aloha"])
+                    choices=["synthetic", "pusht", "aloha", "collected"])
     ap.add_argument("--k", type=int, default=30)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--path", default="data/mixed_pusht.npz",
+                    help="pool file for --source collected")
     args = ap.parse_args()
-    run(args.source, args.k, args.limit)
+    run(args.source, args.k, args.limit, args.path)
 
 
 if __name__ == "__main__":

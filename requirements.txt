@@ -6,3 +6,8 @@ matplotlib>=3.7
 # These pull in torch and are NOT required for the offline verification.
 # lerobot>=0.1
 # torch>=2.2
+
+# Optional M2 collector extras (experiments/collect_pusht.py -- real gym_pusht env).
+# gym_pusht
+# pygame
+# pymunk<7        # gym_pusht needs the pre-7 collision-handler API
