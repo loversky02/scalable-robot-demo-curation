@@ -29,3 +29,22 @@ def normalize_quality(raw: np.ndarray, floor: float = 1e-3) -> np.ndarray:
     else:
         q = (r - lo) / (hi - lo)
     return np.clip(q, floor, 1.0)
+
+
+def proxy_quality(*features: np.ndarray, floor: float = 1e-3) -> np.ndarray:
+    """Combine reward-INDEPENDENT quality signals into one score (geometric mean).
+
+    Intended inputs are cheap kinematic features -- action smoothness, action
+    efficiency, episode duration, jerk -- that do NOT use the task reward. This is
+    the *deployable* quality proxy: real low-cost, non-expert collection often has
+    no reward function, and scoring the selection this way keeps any downstream
+    reward/success evaluation non-circular.
+    """
+    if not features:
+        raise ValueError("proxy_quality needs at least one feature")
+    norm = np.stack(
+        [normalize_quality(np.asarray(f, dtype=float), floor=floor) for f in features],
+        axis=0,
+    )
+    q = np.exp(np.mean(np.log(norm), axis=0))   # geometric mean, stays in (0, 1]
+    return np.clip(q, floor, 1.0)

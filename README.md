@@ -59,8 +59,32 @@ the only method strong on *both* axes. See `outputs/`:
 
 > ⚠️ The synthetic pool is a **controlled unit-test fixture**, not evidence for
 > the claim. It verifies the method and reproduces the expected failure mode
-> offline. The research signal comes from running the same pipeline on real
-> `lerobot/pusht` and a second dataset (below).
+> offline. The research signal comes from running the same pipeline on the
+> public `lerobot/pusht` and `lerobot/aloha_sim_insertion_human` datasets (below).
+
+### Avoiding reward circularity: a reward-free proxy still recovers good demos
+
+Scoring the DPP with `q = reward` and then judging it by *selected-set reward*
+would be circular. So we also score with a **reward-free** proxy quality
+(kinematic `smoothness × efficiency`) and evaluate against the **held-out**
+reward — a signal the selector never saw:
+
+| method (K=30)                 | held-out mean reward ↑ | % experts ↑ |
+|-------------------------------|:----------------------:|:-----------:|
+| random                        | 0.645                  | 0.67        |
+| diversity-only                | 0.226 ⚠️               | 0.13 ⚠️      |
+| **DPP (proxy-q, deployable)** | **0.840**              | 0.90        |
+| DPP (reward-q, oracle)        | 0.947                  | 1.00        |
+
+The reward-free proxy recovers most of the oracle's advantage while never
+touching the reward (proxy–reward correlation ≈ 0.91 — a *good* proxy, not the
+metric itself). This mirrors the **deployable** setting: real low-cost, non-expert
+collection often has no reward function at all. Regenerate with
+`python experiments/proxy_vs_oracle.py` → `outputs/proxy_vs_oracle_synthetic.png`.
+
+> Note: `reward-q` is an oracle upper bound; `proxy-q` is the deployable setting.
+> The cleanest non-circular evidence of all is **M3** (downstream policy success),
+> which measures a different quantity from the reward used to select.
 
 ## Quickstart
 
@@ -77,9 +101,12 @@ python experiments/run_ablation.py --source aloha   # cross-dataset hedge
 
 ## Method details
 
-- **Quality proxy** (`robocurate/quality.py`) — per-episode task reward
-  (`next.reward` / `next.success` in `lerobot/pusht`), min-max normalized to
-  `[ε, 1]`. This is a *task-quality* proxy, **not** ground-truth informativeness.
+- **Quality proxy** (`robocurate/quality.py`) — two settings: `normalize_quality`
+  uses the per-episode task reward (`next.reward` / `next.success`) as an *oracle*
+  signal; `proxy_quality` combines **reward-free** kinematic features (smoothness,
+  action efficiency, duration) for the *deployable* setting. Neither is
+  ground-truth informativeness — a high-reward demo can still be redundant, which
+  is why diversity is needed.
 - **Embedding** (`robocurate/pusht.py`) — fixed-length temporal pooling
   (mean/std/min/max/first/last) of `observation.state` and `action`. A visual /
   foundation-model encoder (DINOv2, R3M) is a documented upgrade.
@@ -89,13 +116,23 @@ python experiments/run_ablation.py --source aloha   # cross-dataset hedge
 ## Roadmap (milestones)
 
 - [x] **M1 — curation engine + ablation** (this repo): quality×diversity DPP,
-      offline-verified, real-data adapters for PushT and ALOHA-sim.
-- [ ] **M2 — low-barrier collector**: keyboard/mouse PushT teleoperation so a
-      *non-expert* can contribute demos, logged in LeRobot format with reward
-      labels → feeds a real mixed-quality pool into M1.
-- [ ] **M3 — downstream policy**: train Diffusion Policy on `curated-K` vs
-      `random-K` (same budget, multiple seeds, error bars). Honest about null
-      results — PushT is small and Diffusion Policy is robust.
+      offline-verified; guarded adapters for public robot-learning datasets.
+- [x] **M2.5 engine — non-circular check** (offline, done here): reward-free proxy
+      quality + oracle/deployable comparison, evaluated against a held-out reward
+      the selector never used. To be re-applied to the M2 pool.
+- [ ] **M1.5 — public-dataset validation**: run the ablation on `lerobot/pusht`
+      and `lerobot/aloha_sim_insertion_human` (needs `lerobot`+`torch`, no GPU).
+      Report selected-set reward/success, diversity, and composition; coverage is
+      a *diagnostic only*, not the headline.
+- [ ] **M2 — low-barrier collection**: mouse teleoperation of PushT (its native
+      control) so a *non-expert* can contribute demos. Self-collect an
+      `expert / clumsy / noisy` pool — *a simulated non-expert pool, not a user
+      study* — logged in LeRobot format with `reward, success, smoothness,
+      duration, operator_mode`.
+- [ ] **M3 — downstream policy**: train Diffusion Policy on the *mixed-quality*
+      pool, `random-K` vs `diversity-only-K` vs `DPP-K` (K=10/25/50, same budget,
+      multiple seeds, error bars; RunPod preferred near a deadline). Honest about
+      null results on clean pools — curation earns its keep on noisy ones.
 
 ## Honest limitations
 
@@ -103,8 +140,11 @@ python experiments/run_ablation.py --source aloha   # cross-dataset hedge
   check). We do **not** claim cross-platform generalization.
 - `q` is a task-quality proxy; a high-reward demo can still be redundant (which
   is exactly why diversity is needed).
+- In the synthetic fixture a latent skill drives *both* reward and the kinematic
+  proxy, so their correlation is high by construction. Genuine reward/kinematic
+  decoupling is a claim to validate on real M2 data, not on the fixture.
 - Greedy DPP MAP is an approximation (no optimality guarantee).
-- Simple pooled embeddings; richer encoders are future work.
+- Simple pooled embeddings; richer encoders (DINOv2, R3M) are future work.
 
 ## Relation to prior work
 
@@ -126,11 +166,13 @@ coupled with a task-quality term so diversity never means "keep the noise".
 robocurate/         core library (offline: numpy only)
   dpp.py            quality×diversity kernel + greedy MAP
   selectors.py      random / quality-only / diversity-only / dpp
-  quality.py        reward → quality proxy
+  quality.py        reward proxy (oracle) + reward-free kinematic proxy
   metrics.py        mean quality, diversity spread, coverage, expert fraction
-  synthetic.py      controlled mixed-quality pool (test fixture)
+  synthetic.py      controlled mixed-quality pools (test fixtures)
   pusht.py          LeRobot adapter (PushT / ALOHA-sim) — guarded import
-experiments/run_ablation.py   the M1 ablation driver (CSV + plots)
-tests/              23 tests, offline, ~0.1s
+experiments/
+  run_ablation.py       the M1 ablation driver (CSV + plots)
+  proxy_vs_oracle.py    the M2.5 non-circular check (reward-free proxy)
+tests/              27 tests, offline, ~0.1s
 outputs/            generated CSV + figures
 ```

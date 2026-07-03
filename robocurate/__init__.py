@@ -13,14 +13,14 @@ from .metrics import (
     expert_fraction,
     selected_mean_quality,
 )
-from .quality import normalize_quality
+from .quality import normalize_quality, proxy_quality
 from .selectors import (
     SELECTORS,
     select_diversity_only,
     select_quality_only,
     select_random,
 )
-from .synthetic import make_mixed_pool
+from .synthetic import make_labeled_pool, make_mixed_pool
 
 __all__ = [
     "build_dpp_kernel",
@@ -32,9 +32,11 @@ __all__ = [
     "select_diversity_only",
     "SELECTORS",
     "normalize_quality",
+    "proxy_quality",
     "selected_mean_quality",
     "coverage_radius",
     "diversity_spread",
     "expert_fraction",
     "make_mixed_pool",
+    "make_labeled_pool",
 ]
