@@ -177,10 +177,11 @@ python experiments/proxy_vs_oracle.py --source aloha        # cross-dataset hedg
 - [x] **M2.5 engine — non-circular check** (offline, done here): reward-free proxy
       quality + oracle/deployable comparison, evaluated against a held-out reward
       the selector never used. To be re-applied to the M2 pool.
-- [ ] **M1.5 — public-dataset validation**: run the ablation on `lerobot/pusht`
-      and `lerobot/aloha_sim_insertion_human` (needs `lerobot`+`torch`, no GPU).
-      Report selected-set reward/success, diversity, and composition; coverage is
-      a *diagnostic only*, not the headline.
+- [x] **M1.5 — public-dataset validation** (done): ran on `lerobot/pusht` (206
+      demos) and `lerobot/aloha_sim_insertion_human` (50 demos, no reward column).
+      Finding: public data is homogeneous expert, so curation gains are small and
+      the reward-free proxy is uninformative — which empirically motivates M2.
+      See **Real-data findings** above; figures in `outputs/*_pusht.png`, `*_aloha.png`.
 - [ ] **M2 — low-barrier collection**: mouse teleoperation of PushT (its native
       control) so a *non-expert* can contribute demos. Self-collect an
       `expert / clumsy / noisy` pool — *a simulated non-expert pool, not a user
